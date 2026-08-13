@@ -1,0 +1,17 @@
+# Núcleo da API (sempre necessário)
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic==2.10.4
+httpx==0.28.1
+python-multipart==0.0.20
+
+# Otimização de rota (recomendado; há fallback puro-Python se ausente)
+ortools==9.11.4210
+
+# OCR de fotos/etiquetas (opcional — habilite um dos dois no servidor)
+# easyocr==1.7.2
+# pytesseract==0.3.13
+# pillow==11.1.0
+
+# Voz -> texto (opcional)
+# faster-whisper==1.1.0
