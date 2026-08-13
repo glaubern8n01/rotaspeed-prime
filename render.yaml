@@ -12,8 +12,25 @@ services:
     autoDeploy: true
     envVars:
       - key: CORS_ORIGINS
-        value: "https://localhost,capacitor://localhost,http://localhost:5173"
+        value: "https://rotaspeed-prime-web.onrender.com,https://localhost,capacitor://localhost,http://localhost:5173"
       - key: GEOCODER_UA
         value: "RotaSpeedPrime/1.0 (contato@exemplo.com)"
       - key: ROTASPEED_API_KEY
         generateValue: true   # gera uma chave forte automaticamente
+
+  # Frontend (site estático Vite/React) — o link que os testadores abrem.
+  - type: web
+    name: rotaspeed-prime-web
+    runtime: static
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    autoDeploy: true
+    envVars:
+      - key: VITE_API_BASE_URL
+        value: "https://rotaspeed-prime-api.onrender.com"
+    routes:
+      # SPA: qualquer rota volta pro index.html (react-router)
+      - type: rewrite
+        source: /*
+        destination: /index.html
