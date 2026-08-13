@@ -55,10 +55,16 @@ uvicorn app.main:app --reload
 - [Publicação nas lojas](docs/PUBLICACAO-LOJAS.md) — backend na nuvem + Capacitor + Play/App Store
 - [Roadmap](docs/ROADMAP.md) — próximos passos até o nível do Circuit
 
+## 🌐 Backend no ar (deploy de teste)
+API Python já publicada na nuvem (Render, plano free — hiberna após inatividade, ~50s no 1º acesso):
+**https://rotaspeed-prime-api.onrender.com** · [/docs](https://rotaspeed-prime-api.onrender.com/docs) · [/health](https://rotaspeed-prime-api.onrender.com/health)
+> Em produção usa o solver **OR-Tools** e geocodificação **Nominatim** reais.
+
 ## 🗺️ Status
-- ✅ Backend Python (parse/geocode/optimize/whatsapp/track) — funcional e testado
-- ✅ Frontend base (flow) + cliente da API Python (`frontend/src/services/api/rotaspeedApi.ts`)
-- 🔜 Ligar 100% o frontend ao backend, matriz por ruas (OSRM), prova de entrega, código de barras
+- ✅ Backend Python (parse/geocode/optimize/whatsapp/track) — funcional, testado e **no ar na nuvem**
+- ✅ Frontend base (flow) integrado ao backend Python (`mediaExtractor` + `RouteOptimizer` + `rotaspeedApi.ts`)
+- ✅ Deploy 1-clique (`render.yaml`) + Capacitor para as lojas
+- 🔜 Matriz por ruas (OSRM), prova de entrega, código de barras — ver [Roadmap](docs/ROADMAP.md)
 
 ## ⚖️ Licença
 MIT — veja [LICENSE](LICENSE).
