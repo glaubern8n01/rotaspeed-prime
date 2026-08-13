@@ -1,0 +1,19 @@
+# Blueprint de deploy na nuvem (Render) — 1 clique.
+# No painel do Render: New + → Blueprint → conecte este repositório.
+# O backend Python sobe automaticamente a partir de backend/Dockerfile.
+services:
+  - type: web
+    name: rotaspeed-prime-api
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: free
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: CORS_ORIGINS
+        value: "https://localhost,capacitor://localhost,http://localhost:5173"
+      - key: GEOCODER_UA
+        value: "RotaSpeedPrime/1.0 (contato@exemplo.com)"
+      - key: ROTASPEED_API_KEY
+        generateValue: true   # gera uma chave forte automaticamente

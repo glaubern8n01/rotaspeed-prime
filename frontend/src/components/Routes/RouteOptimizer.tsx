@@ -5,6 +5,7 @@ import { Entrega } from '@/services/types/entrega';
 import { useToast } from '@/components/ui/use-toast';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import * as api from '@/services/api/rotaspeedApi';
 // Adicionamos a referência para o arquivo de tipos do Google Maps
 /// <reference path="../../types/google-maps.d.ts" />
 
@@ -32,6 +33,18 @@ interface RouteOptimizerProps {
 // Função para geocodificar endereços usando a API do Google Maps
 const geocodeAddress = async (address: string, cep: string): Promise<{lat: number, lng: number} | null> => {
   try {
+    // 1) Backend Python (Nominatim/OSM) — geocodificação REAL, grátis e sem chave.
+    try {
+      const query = `${cep ? cep + ', ' : ''}${address}, Brasil`;
+      const [res] = await api.geocode([query]);
+      if (res && res.lat != null && res.lon != null && res.confidence !== 'none') {
+        return { lat: res.lat, lng: res.lon };
+      }
+    } catch (backendErr) {
+      console.warn('Geocode backend indisponível, usando fallback local:', backendErr);
+    }
+
+    // 2) Fallback: Google Maps (se o usuário configurou chave) ou simulação por CEP.
     // Tenta obter a chave da API do localStorage
     const config = localStorage.getItem('rotaspeed_config');
     const apiKey = config ? JSON.parse(config).apiKeyGoogleMaps : '';
@@ -386,7 +399,31 @@ const RouteOptimizer: React.FC<RouteOptimizerProps> = ({
         }
       }
       
-      // 4. Otimizar a rota usando algoritmo do vizinho mais próximo
+      // 4. Otimização REAL no backend Python (OR-Tools/2-opt). Fallback: NN local.
+      try {
+        const result = await api.optimize(
+          locationsToOptimize.map((loc, i) => ({ id: String(i), lat: loc.lat, lon: loc.lng })),
+          { depot_index: 0, round_trip: false }
+        );
+        const byId = new Map(locationsToOptimize.map((loc, i) => [String(i), loc]));
+        const ordered = result.order.map(id => byId.get(id)).filter(Boolean) as GeocodedLocation[];
+        const withDepot = [locationsToOptimize[0], ...ordered];
+        const finalRoute = startingPoint
+          ? withDepot.filter(loc => loc.id !== 'starting-point')
+          : withDepot;
+        const finalOptimizedRoute = finalRoute.map((loc, idx) => ({ ...loc, index: idx }));
+        onOptimized(finalOptimizedRoute);
+        toast({
+          title: 'Rota otimizada (Python)',
+          description: `${finalOptimizedRoute.length} endereços na melhor sequência via ${result.solver} — ${result.total_distance_km} km`
+        });
+        setIsOptimizing(false);
+        return;
+      } catch (backendErr) {
+        console.warn('Otimização backend indisponível, usando NN local:', backendErr);
+      }
+
+      // 4b. Fallback local: algoritmo do vizinho mais próximo
       const optimizedRoute: GeocodedLocation[] = [];
       
       // O primeiro ponto é o ponto de partida ou o primeiro endereço

@@ -1,5 +1,7 @@
 # backend/ — RotaSpeed Prime API (Python, sem Gemini)
 
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/glaubern8n01/rotaspeed-prime)
+
 FastAPI que substitui toda a IA do Gemini por processamento local/determinístico.
 
 ## Rodar local (desenvolvimento)

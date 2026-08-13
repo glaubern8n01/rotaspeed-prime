@@ -1,5 +1,6 @@
-
 import { Entrega } from '../types/entrega';
+import * as api from '../api/rotaspeedApi';
+import { analisarTextoEndereco } from './addressExtractor';
 
 // Interface for address extraction response
 export interface AddressExtraction {
@@ -11,130 +12,112 @@ export interface AddressExtraction {
   telefone?: string;
 }
 
-// Extract address from image file
+// Converte o retorno do backend Python (ParsedAddress) para o formato do app.
+const fromParsed = (p: api.ParsedAddress): AddressExtraction => ({
+  endereco: p.street || 'Endereço não identificado',
+  numero: p.number || 'S/N',
+  bairro: p.bairro || 'Bairro não identificado',
+  cep: p.cep || '',
+  cliente: p.recipient_name || undefined,
+  telefone: p.telefone || undefined,
+});
+
+// Fallback local (offline) usando o parser client-side já existente.
+const localFallback = (text: string): AddressExtraction[] => {
+  const e = analisarTextoEndereco(text);
+  return [{ endereco: e.endereco, numero: e.numero, bairro: e.bairro, cep: e.cep,
+            cliente: e.cliente, telefone: e.telefone }];
+};
+
+/**
+ * Foto/etiqueta -> OCR no backend Python (EasyOCR/Tesseract) -> endereços.
+ * Antes isto retornava dados MOCK ("Avenida Paulista"). Agora lê a foto de verdade.
+ */
 export const extractAddressFromImage = async (file: File): Promise<AddressExtraction[]> => {
-  // In a real implementation, you would use OCR service like OCR.space or Google Vision API
-  console.log('Extracting address from image:', file.name);
-  
-  // For now returning mock data
-  return [{
-    endereco: 'Avenida Paulista',
-    numero: '1000',
-    bairro: 'Bela Vista',
-    cep: '01310-100',
-    cliente: 'Cliente Exemplo'
-  }];
-};
-
-// Extract address from voice/audio recording
-export const extractAddressFromVoice = async (audioText: string): Promise<AddressExtraction[]> => {
-  // In real implementation, you would use NLP to extract structured address data
-  console.log('Extracting address from voice text:', audioText);
-  
-  // Simple regex extraction (very basic, would need to be more robust in production)
-  const enderecoMatch = audioText.match(/(?:rua|avenida|av|alameda|travessa|estrada)\s+([^\d,]+)/i);
-  const numeroMatch = audioText.match(/(?:número|numero|nº|n°|n)\s*(\d+)/i);
-  const bairroMatch = audioText.match(/(?:bairro|vila|jardim)\s+([^,]+)/i);
-  const cepMatch = audioText.match(/(?:cep|código postal)\s*(\d{5}-?\d{3})/i);
-  const clienteMatch = audioText.match(/(?:cliente|destinatário|destinatario|para)\s+([^,]+)/i);
-  
-  return [{
-    endereco: enderecoMatch ? enderecoMatch[1].trim() : 'Endereco não identificado',
-    numero: numeroMatch ? numeroMatch[1].trim() : 'S/N',
-    bairro: bairroMatch ? bairroMatch[1].trim() : 'Bairro não identificado',
-    cep: cepMatch ? cepMatch[1].trim() : '',
-    cliente: clienteMatch ? clienteMatch[1].trim() : undefined
-  }];
-};
-
-// Extract address from pasted or typed text
-export const extractAddressFromText = async (text: string): Promise<AddressExtraction[]> => {
-  console.log('Extracting address from text input');
-  
-  // Check if we have multiple lines (multiple addresses)
-  const lines = text.split(/\r?\n/).filter(line => line.trim().length > 0);
-  
-  if (lines.length > 1) {
-    // Process multiple addresses
-    return lines.map(line => {
-      // Very basic extraction - would need NLP in production
-      const parts = line.split(',').map(part => part.trim());
-      
-      return {
-        endereco: parts[0] || 'Endereço não identificado',
-        numero: (parts[1] || 'S/N').replace(/[^\d]/g, '') || 'S/N',
-        bairro: parts[2] || 'Bairro não identificado',
-        cep: (parts[3] || '').match(/\d{5}-?\d{3}/) ? parts[3] : '',
-        cliente: parts[4] || undefined
-      };
-    });
-  } else {
-    // Process single address
-    const parts = text.split(',').map(part => part.trim());
-    
-    return [{
-      endereco: parts[0] || 'Endereço não identificado',
-      numero: (parts[1] || 'S/N').replace(/[^\d]/g, '') || 'S/N',
-      bairro: parts[2] || 'Bairro não identificado',
-      cep: (parts[3] || '').match(/\d{5}-?\d{3}/) ? parts[3] : '',
-      cliente: parts[4] || undefined
-    }];
+  try {
+    const parsed = await api.parseImage(file);
+    if (parsed.length) return parsed.map(fromParsed);
+  } catch (err) {
+    console.warn('OCR backend indisponível, sem extração de imagem:', err);
   }
+  // Sem OCR local no navegador — devolve vazio para o app pedir entrada manual.
+  return [];
 };
 
-// Extract address from PDF document
-export const extractAddressFromPDF = async (file: File): Promise<AddressExtraction[]> => {
-  // In a real implementation, you would use PDF parsing library or API
-  console.log('Extracting address from PDF:', file.name);
-  
-  // Returning mock data - in real app would extract from PDF content
-  return [
-    {
-      endereco: 'Rua Augusta',
-      numero: '1500',
-      bairro: 'Consolação',
-      cep: '01304-001',
-      cliente: 'Cliente PDF 1'
-    },
-    {
-      endereco: 'Avenida Rebouças',
-      numero: '3970',
-      bairro: 'Pinheiros',
-      cep: '05402-600',
-      cliente: 'Cliente PDF 2'
-    }
-  ];
+/**
+ * Áudio (voz) -> STT no backend Python (Whisper) -> endereços.
+ * Aceita tanto um Blob de áudio quanto (compatibilidade) um texto já transcrito.
+ */
+export const extractAddressFromVoice = async (
+  audio: Blob | string
+): Promise<AddressExtraction[]> => {
+  if (typeof audio === 'string') {
+    // já veio transcrito (Web Speech API do dispositivo) -> parse no backend
+    return extractAddressFromText(audio);
+  }
+  try {
+    const parsed = await api.parseAudio(audio);
+    if (parsed.length) return parsed.map(fromParsed);
+  } catch (err) {
+    console.warn('STT backend indisponível:', err);
+  }
+  return [];
 };
 
-// Extract addresses from spreadsheet (Excel/CSV)
+/**
+ * Texto colado/digitado -> parser do backend Python (com fallback local offline).
+ */
+export const extractAddressFromText = async (text: string): Promise<AddressExtraction[]> => {
+  try {
+    const parsed = await api.parseText(text, true);
+    if (parsed.length) return parsed.map(fromParsed);
+  } catch (err) {
+    console.warn('Parser backend indisponível, usando fallback local:', err);
+  }
+  return localFallback(text);
+};
+
+// Lê o conteúdo textual de um arquivo (CSV/planilha exportada como texto / PDF-texto).
+const readAsText = (file: File): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = reject;
+    reader.readAsText(file);
+  });
+
+/**
+ * Planilha/CSV -> lê as linhas e manda cada uma para o parser Python.
+ * (Para .xlsx binário, exporte como CSV; o backend cuida do resto.)
+ */
 export const extractAddressFromSpreadsheet = async (file: File): Promise<AddressExtraction[]> => {
-  // In a real implementation, you would use spreadsheet parsing library
-  console.log('Extracting addresses from spreadsheet:', file.name);
-  
-  // Returning mock data - in real app would extract from spreadsheet content
-  return [
-    {
-      endereco: 'Avenida Brigadeiro Faria Lima',
-      numero: '3477',
-      bairro: 'Itaim Bibi',
-      cep: '04538-133',
-      cliente: 'Cliente Planilha 1',
-      telefone: '11987654321'
-    },
-    {
-      endereco: 'Rua Oscar Freire',
-      numero: '585',
-      bairro: 'Jardim Paulista',
-      cep: '01426-001',
-      cliente: 'Cliente Planilha 2',
-      telefone: '11912345678'
-    },
-    {
-      endereco: 'Avenida Paulista',
-      numero: '2300',
-      bairro: 'Bela Vista',
-      cep: '01310-300',
-      cliente: 'Cliente Planilha 3'
+  try {
+    const text = await readAsText(file);
+    if (text.trim()) {
+      const parsed = await api.parseText(text, true);
+      if (parsed.length) return parsed.map(fromParsed);
     }
-  ];
+  } catch (err) {
+    console.warn('Falha ao ler planilha:', err);
+  }
+  return [];
+};
+
+/**
+ * PDF -> tenta enviar o texto extraível para o parser Python.
+ * PDFs digitalizados (imagem) devem ir por extractAddressFromImage (OCR).
+ */
+export const extractAddressFromPDF = async (file: File): Promise<AddressExtraction[]> => {
+  try {
+    const text = await readAsText(file);
+    // Heurística: se veio texto legível, parseia; senão, orienta usar OCR.
+    if (text && /[A-Za-zÀ-ú]{4,}/.test(text)) {
+      const parsed = await api.parseText(text, true);
+      if (parsed.length) return parsed.map(fromParsed);
+    }
+    console.warn('PDF sem texto legível — use a opção de foto (OCR) para PDFs digitalizados.');
+  } catch (err) {
+    console.warn('Falha ao ler PDF:', err);
+  }
+  return [];
 };
